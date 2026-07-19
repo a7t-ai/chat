@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `usage_reset_at` integer;

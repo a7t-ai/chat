@@ -1,0 +1,51 @@
+/* a7t design tokens. Webfonts (Switzer / JetBrains Mono) are loaded
+   in a later polish pass; until then these fall back to system faces. */
+:root {
+  color-scheme: dark;
+
+  --bg: #0b0b0c;
+  --surface: #141416;
+  --surface-2: #1b1b1e;
+  --border: #26262a;
+  --text: #e8e8e6;
+  --muted: #a1a1aa;
+  --accent: #e8e8e6;
+  /* Primary "send" color for the composer's submit button. Each theme overrides this
+     with a hue that matches its palette (see themes.ts); this value is the fallback
+     used before a theme is applied. */
+  --send: #2f7bf6;
+
+  /* Semantic status colors (design system). One source of truth for danger/warning/success so
+     validation + status UI reads the same everywhere (see ui/InlineMessage, ui/Badge). Mid-tones
+     chosen to hold contrast on BOTH dark and light grounds; the light-mode block below refines
+     them. `--info` tracks the theme accent. */
+  --danger: #e5484d;
+  --warning: #d9820b;
+  --success: #30a46c;
+  --info: var(--accent);
+
+  --radius: 12px;
+
+  /* Motion (design system). One easing curve + a small duration scale, so entrance animations feel
+     consistent. The `.ui-anim-*` utilities (ui.css) use these; ALL of them are disabled under
+     reduce-motion (the `data-motion="reduced"` app setting AND the OS `prefers-reduced-motion`). */
+  --ui-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ui-duration-fast: 120ms;
+  --ui-duration: 200ms;
+  --ui-duration-slow: 320ms;
+
+  --font-sans: "Switzer", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  /* Accessibility font scale (#11). applyPreferences() overrides this on <html>; the html
+     rule in app.css scales the rem base off it, so every rem-sized element grows/shrinks. */
+  --font-scale: 1;
+}
+
+/* Light themes need darker status hues to hold contrast on a pale ground. `data-mode` is set on
+   <html> by the theme applier (see lib/theme.ts). */
+:root[data-mode="light"] {
+  --danger: #ce2c31;
+  --warning: #a35200;
+  --success: #227a4e;
+}

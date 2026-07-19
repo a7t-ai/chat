@@ -1,0 +1,25 @@
+# deps
+node_modules/
+
+# runtime data — the only writable area; never commit it
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# secrets
+.env
+
+# misc
+.DS_Store
+dist/
+*.log
+
+# foreman PR-handoff drop-box (internal runner signal, never part of a change)
+.foreman/
+
+# test coverage reports
+coverage/
+
+# graphify knowledge-graph output (local only)
+graphify-out/

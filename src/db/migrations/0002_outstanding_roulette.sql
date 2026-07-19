@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `starred` integer DEFAULT false NOT NULL;

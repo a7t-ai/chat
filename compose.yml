@@ -1,0 +1,28 @@
+# a7t-chat — confined service.
+#   - The ONLY writable area is ./data (mounted). The rest of the Mac is invisible.
+#   - Reaches the host's Jano + embed services via host.docker.internal.
+#   - Published ONLY on host loopback (127.0.0.1): Tailscale Serve + cloudflared reach
+#     it; LAN/internet cannot. This preserves the "bind 127.0.0.1" security property.
+# Run with OrbStack (or Docker): `docker compose up -d`.
+
+services:
+  chat:
+    build: .
+    container_name: a7t-chat
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    env_file:
+      - .env
+    environment:
+      # These override .env for in-container networking + binding.
+      BIND_HOST: 0.0.0.0
+      PORT: "8787"
+      DATA_DIR: /app/data
+      DB_PATH: /app/data/chat.db
+      JANO_URL: http://host.docker.internal:8082
+      EMBED_URL: http://host.docker.internal:8090
+    volumes:
+      - ./data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

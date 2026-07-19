@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `compacted_through_message_id` text;

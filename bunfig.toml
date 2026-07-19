@@ -1,0 +1,19 @@
+# Backend test + coverage (Bun-native — the backend uses bun:sqlite/Bun APIs, so it can't
+# run under vitest). Coverage thresholds mirror IGNIO's bar; branch coverage isn't a Bun
+# metric, so we gate line/function/statement. Discipline: one test file per module so every
+# module is loaded and counted (Bun only measures files touched by the run).
+[test]
+# Backend tests only — web/ is vitest (jsdom). `root` keeps `bun test` out of web/src.
+root = "src"
+preload = ["./src/__tests__/setup.ts"]
+# Threshold is enforced only when coverage runs (`bun test --coverage`, the gate). Plain
+# `bun test` stays fast during the grind.
+coverageThreshold = { line = 0.8, function = 0.8, statement = 0.8 }
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coveragePathIgnorePatterns = [
+  "src/server.ts",
+  "src/db/migrations/",
+  "src/db/migrate.ts",
+  "scripts/",
+]
