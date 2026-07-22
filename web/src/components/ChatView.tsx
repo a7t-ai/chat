@@ -1,7 +1,7 @@
 import {
   ArrowUp,
   AudioLines,
-  the workstation,
+  Brain,
   Globe,
   ListTree,
   Menu,
@@ -2570,7 +2570,7 @@ function Composer({
               title={thinkingOn ? t("thinking.tooltipOn") : t("thinking.tooltipOff")}
               aria-label={thinkingOn ? t("thinking.tooltipOn") : t("thinking.tooltipOff")}
             >
-              <the workstation size={16} strokeWidth={1.75} aria-hidden="true" />
+              <Brain size={16} strokeWidth={1.75} aria-hidden="true" />
               <span className="composer-thinking-label">{t("thinking.label")}</span>
             </button>
             {/* Voice / conversational mode (#70): a sibling toggle to Search/Thinking. On, it runs

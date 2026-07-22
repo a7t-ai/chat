@@ -266,6 +266,8 @@ export const en = {
   "error.notAvailable": "That model or feature is not available on your account.",
   "error.server": "Something went wrong on our end. Please try again in a moment.",
   "error.stream": "The response stopped early. Try again, or switch to another model.",
+  "error.modelNotServed":
+    "The selected model is not available on your endpoint. Pick another model, or make sure your server is serving it.",
   "error.generic": "Something went wrong. Please try again.",
 
   // Composer

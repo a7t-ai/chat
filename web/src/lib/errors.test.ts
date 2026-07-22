@@ -40,8 +40,19 @@ describe("errorKey", () => {
 
   test("a mid-stream error frame maps to the stream message", () => {
     expect(errorKey({ kind: "stream" })).toBe("error.stream");
-    // A stream frame can carry a server message; it still routes by kind, not the text.
+    // A generic stream frame routes by kind; a bare "model" mention that isn't a not-found signal
+    // (no 404, no "not found"/"does not exist"/"unknown") stays the generic stream message.
     expect(errorKey({ kind: "stream", serverMessage: "model exploded" })).toBe("error.stream");
+    expect(errorKey({ kind: "stream", serverMessage: "connection reset" })).toBe("error.stream");
+  });
+
+  test("a mid-stream 'model not served' error maps to the model-specific message", () => {
+    // The shared parser formats an upstream rejection as `<label> -> <status>: <detail>`.
+    expect(errorKey({ kind: "stream", serverMessage: `chat -> 404: {"error":"model 'qwen-chat' not found"}` })).toBe(
+      "error.modelNotServed",
+    );
+    expect(errorKey({ kind: "stream", serverMessage: "the model does not exist" })).toBe("error.modelNotServed");
+    expect(errorKey({ kind: "stream", serverMessage: "unknown model: qwen-omni" })).toBe("error.modelNotServed");
   });
 
   test("an unrecognized status (400) and an empty info fall through to generic", () => {

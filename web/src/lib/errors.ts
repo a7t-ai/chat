@@ -26,6 +26,18 @@ export function isNetworkError(e: unknown): boolean {
   return /failed to fetch|network|load failed/i.test(msg);
 }
 
+// A mid-stream upstream failure that means "the endpoint does not serve this model id" — the
+// router answered 404, or its message names a missing/unknown model. Matched loosely because the
+// exact wording varies by backend (llama-server, Jano, vLLM, any OpenAI-compatible proxy). The
+// shared parser (src/llm/stream.ts) formats these as `<label> -> <status>: <detail>`, so a rejected
+// DEFAULT_MODEL arrives here carrying both the 404 and the reason.
+function isModelNotServed(msg: string | undefined): boolean {
+  if (!msg) return false;
+  const m = msg.toLowerCase();
+  if (m.includes("404")) return true;
+  return m.includes("model") && (m.includes("not found") || m.includes("does not exist") || m.includes("unknown"));
+}
+
 // Map a classified failure to the message key whose copy we show behind the ⚠️. Order
 // matters: network beats everything (we never reached the server), then the specific HTTP
 // statuses, then the mid-stream kind, then a generic catch-all (covers 400 and anything
@@ -42,6 +54,11 @@ export function errorKey(info: ErrorInfo): MessageKey {
   if (status === 401) return "error.session";
   if (status === 403) return "error.notAvailable";
   if (status !== undefined && status >= 500) return "error.server";
-  if (info.kind === "stream") return "error.stream";
+  if (info.kind === "stream") {
+    // A mid-stream error often carries the upstream reason. When it reads as "the endpoint does
+    // not serve this model", say so specifically — the fix is picking a served model, not retrying.
+    if (isModelNotServed(info.serverMessage)) return "error.modelNotServed";
+    return "error.stream";
+  }
   return "error.generic";
 }

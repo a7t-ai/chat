@@ -240,6 +240,8 @@ export const ptBR: Record<MessageKey, string> = {
   "error.notAvailable": "Esse modelo ou recurso não está disponível na sua conta.",
   "error.server": "Algo deu errado do nosso lado. Tente de novo em instantes.",
   "error.stream": "A resposta parou cedo demais. Tente de novo, ou troque para outro modelo.",
+  "error.modelNotServed":
+    "O modelo selecionado não está disponível no seu endpoint. Escolha outro modelo ou confirme que o seu servidor o oferece.",
   "error.generic": "Algo deu errado. Tente de novo.",
 
   // Tela inicial de nova conversa (thread vazia) — trilhas + sugestões de início

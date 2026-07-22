@@ -1,4 +1,4 @@
-import { BarChart3, the workstation, Fingerprint, FolderOpen, Info, Key, Keyboard, Share2, SlidersHorizontal, User, Users } from "lucide-react";
+import { BarChart3, Brain, Fingerprint, FolderOpen, Info, Key, Keyboard, Share2, SlidersHorizontal, User, Users } from "lucide-react";
 import type { Me } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { SidebarModal, type SidebarModalItem } from "./ui";
@@ -60,7 +60,7 @@ export function AccountModal({
     { id: "profile", label: t("nav.profile"), icon: User },
     { id: "directory", label: t("directory.title"), icon: Users },
     { id: "settings", label: t("nav.settings"), icon: SlidersHorizontal },
-    { id: "memory", label: t("memory.title"), icon: the workstation },
+    { id: "memory", label: t("memory.title"), icon: Brain },
     // Passkeys only appear when the server has WebAuthn configured (#20) — dark otherwise.
     ...(me.passkeys?.available ? ([{ id: "passkeys", label: t("passkeys.title"), icon: Fingerprint }] satisfies SidebarModalItem[]) : []),
     { id: "keys", label: t("byok.title"), icon: Key },

@@ -3896,7 +3896,7 @@ textarea.input {
   letter-spacing: 0.04em;
   cursor: pointer;
   user-select: none;
-  list-style: none; /* hide the native disclosure triangle (we lead with the the workstation glyph) */
+  list-style: none; /* hide the native disclosure triangle (we lead with the Brain glyph) */
 }
 .reasoning-summary::-webkit-details-marker {
   display: none;

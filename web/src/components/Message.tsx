@@ -1,5 +1,5 @@
 import {
-  the workstation,
+  Brain,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -272,7 +272,7 @@ function Reasoning({ text, streaming }: { text: string; streaming?: boolean }) {
   return (
     <details className="reasoning">
       <summary className="reasoning-summary">
-        <the workstation size={15} strokeWidth={1.75} aria-hidden="true" />
+        <Brain size={15} strokeWidth={1.75} aria-hidden="true" />
         <span className="reasoning-label">{t("message.reasoning")}</span>
         {streaming && <span className="reasoning-live" aria-hidden="true" />}
       </summary>

@@ -59,6 +59,32 @@ and nothing is sent to any third party. You need [Bun](https://bun.sh) and any O
 model endpoint (for example [Jano](https://github.com/a7t-ai/jano), llama.cpp's `llama-server`,
 Ollama, or vLLM).
 
+### Fastest: one command
+
+```bash
+curl -fsSL https://bun.sh/install | bash   # if you don't have Bun
+bun install
+bun run setup
+```
+
+`bun run setup` detects your machine, recommends a local model it can actually run, downloads it
+from Hugging Face, serves it with llama.cpp, wires `.env`, and verifies a clean streaming turn.
+Everything persistent (the download, installing llama.cpp, a boot service, editing `.env`) is
+confirmed first and can be skipped, so you can just try it in the foreground or let it set up a
+service that survives reboots. macOS (Apple Silicon) is fully supported today; on Linux the wizard
+recommends and downloads a model and wires `.env`, then prints the llama.cpp and service commands to
+run. Non-interactive: `bun run setup --yes --model qwen2.5-7b`; preview only: `bun run setup --dry-run`.
+
+Then create the database and start the app:
+
+```bash
+bun run db:migrate
+(cd web && bun install && bun run build)
+bun run start        # http://127.0.0.1:8787
+```
+
+### Or set it up by hand
+
 1. **Install Bun** (if you don't have it): `curl -fsSL https://bun.sh/install | bash`
 2. **Install dependencies:** `bun install`
 3. **Create your env file:** `cp .env.example .env`
@@ -72,6 +98,18 @@ Ollama, or vLLM).
    proxying the API to `8787`).
 
 Open `http://localhost:5173` and start chatting. That's the whole loop, entirely on your machine.
+
+### Serving a model
+
+The app is a plain OpenAI-compatible client, so any endpoint works. For a single model, point
+`JANO_URL` straight at llama.cpp's `llama-server` (`brew install llama.cpp`; `bun run setup` does
+this for you). For several models on one machine that cannot all fit in memory at once, put
+[Jano](https://github.com/a7t-ai/jano) in front: it is a tiny router that greedy-batches requests by
+model so a burst of mixed calls costs one model swap instead of many, and the app inherits model
+switching and per-backend telemetry with one `JANO_URL`. A note on multimodal GGUFs: some MLX
+serving stacks intermittently leak a stray `user` role marker into streamed replies; llama.cpp uses
+the GGUF's own chat template and does not, which is why the wizard verifies with a streaming smoke
+test.
 
 To let other people sign up with a passkey, set `WEBAUTHN_RP_ID` (the registrable domain the app is
 served from) and `APP_URL` to your real origin. Passkeys are dark until `WEBAUTHN_RP_ID` is set, so
