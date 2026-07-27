@@ -177,6 +177,7 @@ Ollama, or vLLM).
 ### Fastest: one command
 
 ```bash
+git clone https://github.com/a7t-ai/chat.git && cd chat
 curl -fsSL https://bun.sh/install | bash   # if you don't have Bun
 bun install
 bun run setup
@@ -200,16 +201,17 @@ bun run start        # http://127.0.0.1:8787
 
 ### Or set it up by hand
 
-1. **Install Bun** (if you don't have it): `curl -fsSL https://bun.sh/install | bash`
-2. **Install dependencies:** `bun install`
-3. **Create your env file:** `cp .env.example .env`
-4. **Point at your model:** set `JANO_URL` to your local OpenAI-compatible endpoint (default
+1. **Get the code:** `git clone https://github.com/a7t-ai/chat.git && cd chat`
+2. **Install Bun** (if you don't have it): `curl -fsSL https://bun.sh/install | bash`
+3. **Install dependencies:** `bun install`
+4. **Create your env file:** `cp .env.example .env`
+5. **Point at your model:** set `JANO_URL` to your local OpenAI-compatible endpoint (default
    `http://127.0.0.1:8082`) and `DEFAULT_MODEL` to a model id that endpoint exposes via
    `/v1/models`.
-5. **Create the database:** `bun run db:migrate` (migrations also auto-apply on boot).
-6. **Start the backend as the owner:** `DEV_ADMIN_LOGIN=you@example.com bun run dev` (serves on
+6. **Create the database:** `bun run db:migrate` (migrations also auto-apply on boot).
+7. **Start the backend as the owner:** `DEV_ADMIN_LOGIN=you@example.com bun run dev` (serves on
    `http://127.0.0.1:8787`). `DEV_ADMIN_LOGIN` makes you the owner locally, no account needed.
-7. **Start the frontend:** `cd web && bun install && bun run dev` (on `http://localhost:5173`,
+8. **Start the frontend:** `cd web && bun install && bun run dev` (on `http://localhost:5173`,
    proxying the API to `8787`).
 
 Open `http://localhost:5173` and start chatting. That's the whole loop, entirely on your machine.
