@@ -14,14 +14,17 @@ import { resolveTurnBackend } from "../byok/backend.ts";
 import { byokModelsFor } from "../byok/models.ts";
 import type { MergedModel } from "../models/types.ts";
 import {
+  applyUserPartsToLast,
   attachmentsMeta,
   attachmentsPromptBlock,
   MAX_PROMPT_ATTACHMENTS,
+  multimodalUserParts,
   parseStoredAttachments,
   type ResolvedAttachment,
   resolveAttachments,
 } from "../files/prompt.ts";
 import type { ChatMessage } from "../jano/types.ts";
+import { modelAcceptsImages } from "../models/catalog.ts";
 import { embedConversation, recall } from "../memory/recall.ts";
 import { dismissRecap, resolveRecap, resolveRecapForced } from "../memory/recap.ts";
 import {
@@ -641,11 +644,24 @@ chat.post("/chat", requireFeature("chat.send"), async (c) => {
     } catch (e) {
       return entitlementJson(c, e as EntitlementError);
     }
-    const resolved = await resolveAttachments(auth.user.id, fileIds);
+    // Deliver attached images to the model as multimodal parts (#235) only when the turn's model can
+    // read images (Omni). Resolve the SAME model the turn will actually run on: an explicit body.model,
+    // else the conversation's stored model (an existing chat can be Omni while the request omits the
+    // model), else the default - mirroring the ghost/persisted model resolution below so delivery never
+    // silently no-ops on an Omni conversation. The client gates the attach affordance the same way; this
+    // is the server-side re-check.
+    const turnModel =
+      body.model ?? (body.conversationId ? conversationOf(body.conversationId)?.model : null) ?? svc.DEFAULT_MODEL;
+    const deliverImages = modelAcceptsImages(turnModel);
+    const resolved = await resolveAttachments(auth.user.id, fileIds, undefined, { deliverImages });
     if (!resolved.ok) return c.json({ error: "one or more attached files are unavailable" }, 400);
     attachments = resolved.items;
   }
   const filesBlock = attachmentsPromptBlock(attachments);
+  // The image parts for THIS turn's user message (null when no image was delivered). Used to attach
+  // images to the user message in both the ghost path (constructed inline) and the persisted path
+  // (the current user turn comes from the stored thread — see applyUserPartsToLast).
+  const userParts = multimodalUserParts(content, attachments);
 
   // --- temporary (ghost) chat turn ---
   // Nothing is persisted: no conversation, no messages, no memory, no embeddings. The
@@ -692,7 +708,9 @@ chat.post("/chat", requireFeature("chat.send"), async (c) => {
     // free session, so no preferences read here. Attached files (#128) are still delivered as a
     // context block (text inlined) — a ghost chat persists nothing, but the turn itself uses them.
     const filesBlockMsgs = filesBlock ? [filesBlock] : [];
-    let promptMessages: ChatMessage[] = [ephemeralSystemPrompt(), ...filesBlockMsgs, ...priorHistory, { role: "user", content }];
+    // Attach delivered images (#235) to this turn's user message; a text-only turn stays a plain string.
+    const userMessage: ChatMessage = userParts ? { role: "user", content, parts: userParts } : { role: "user", content };
+    let promptMessages: ChatMessage[] = [ephemeralSystemPrompt(), ...filesBlockMsgs, ...priorHistory, userMessage];
 
     // Stream tied to this request (no background live registry — there's nothing to
     // reattach to). A client disconnect (Stop) aborts the upstream generation.
@@ -713,7 +731,7 @@ chat.post("/chat", requireFeature("chat.send"), async (c) => {
           }).catch(() => null);
           if (outcome) {
             await stream.writeSSE({ event: "sources", data: JSON.stringify({ sources: outcome.sources }) });
-            promptMessages = [ephemeralSystemPrompt(), outcome.system, ...filesBlockMsgs, ...priorHistory, { role: "user", content }];
+            promptMessages = [ephemeralSystemPrompt(), outcome.system, ...filesBlockMsgs, ...priorHistory, userMessage];
           }
         }
         // Ghost chats share the global generation queue too (one machine). Position is
@@ -863,7 +881,9 @@ chat.post("/chat", requireFeature("chat.send"), async (c) => {
   // When the conversation was compacted, the pre-boundary turns are dropped here and the rolling
   // summary (injected by buildSystemPrompt above) represents them — so the model prompt stays under
   // the context window while the stored transcript is untouched.
-  const priorTurns = svc.history(conv.id, conv.compactedThroughMessageId);
+  // The current user turn is the last message of the stored thread; attach delivered images (#235)
+  // to it so a multimodal model receives them (a no-op for a text-only turn).
+  const priorTurns = applyUserPartsToLast(svc.history(conv.id, conv.compactedThroughMessageId), userParts);
 
   // Run the turn in the background, decoupled from this HTTP request, so a client
   // refresh (disconnect) doesn't kill it — it streams into a live registry that this

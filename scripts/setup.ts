@@ -18,6 +18,7 @@
 import os from "node:os";
 import { chmod, mkdir, unlink } from "node:fs/promises";
 import { hfResolveUrl, SETUP_CATALOG, setupModelById, type SetupModel } from "../src/setup/catalog.ts";
+import { fetchHfCatalog } from "../src/setup/hf.ts";
 import {
   budgetFor,
   type Hardware,
@@ -352,14 +353,19 @@ async function main(): Promise<void> {
 
   // 2. Recommend + pick ------------------------------------------------------------------------
   step(2, "Recommending a model that fits");
-  const fits = recommend(hw);
+  // Recommendations come from Hugging Face (current models, kept fresh without a code edit); the
+  // built-in SETUP_CATALOG is only the offline fallback when HF is unreachable.
+  const live = await fetchHfCatalog();
+  const catalog = live.length > 0 ? live : SETUP_CATALOG;
+  if (live.length === 0) console.log(dim("  (Hugging Face was unreachable — using the built-in fallback list)"));
+  const fits = recommend(hw, catalog);
   const forced = arg("model");
   let chosen: SetupModel | undefined;
 
   if (forced) {
-    chosen = setupModelById(forced);
+    chosen = setupModelById(forced, catalog);
     if (!chosen) {
-      console.error(red(`  unknown model "${forced}". Known: ${SETUP_CATALOG.map((m) => m.id).join(", ")}`));
+      console.error(red(`  unknown model "${forced}". Known: ${catalog.map((m) => m.id).join(", ")}`));
       process.exit(1);
     }
   } else if (fits.length === 0) {
@@ -377,7 +383,7 @@ async function main(): Promise<void> {
     });
     const pick = askStr("\n  Which model? (number or id)", "1");
     chosen =
-      fits[Number.parseInt(pick, 10) - 1] ?? fits.find((m) => m.id === pick) ?? setupModelById(pick) ?? fits[0];
+      fits[Number.parseInt(pick, 10) - 1] ?? fits.find((m) => m.id === pick) ?? setupModelById(pick, catalog) ?? fits[0];
   }
   if (!chosen) {
     console.error(red("  no model selected."));

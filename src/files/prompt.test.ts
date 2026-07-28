@@ -2,16 +2,21 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { db } from "../db/index.ts";
 import { files, users } from "../db/schema.ts";
 import {
+  applyUserPartsToLast,
   attachmentsMeta,
   attachmentsPromptBlock,
+  isImageAttachment,
   isTextAttachment,
   MAX_PROMPT_ATTACHMENTS,
   MAX_PROMPT_FILE_BYTES,
+  MAX_PROMPT_IMAGE_BYTES,
+  multimodalUserParts,
   parseStoredAttachments,
   resolveAttachments,
 } from "./prompt.ts";
 import { createFile } from "./service.ts";
 import type { FileStorage } from "./storage.ts";
+import type { ChatMessage, ContentPart } from "../jano/types.ts";
 
 // In-memory storage so the resolver is exercised without disk I/O (same pattern as service.test).
 class MemStorage implements FileStorage {
@@ -206,5 +211,121 @@ describe("files/prompt — attachmentsMeta + parseStoredAttachments", () => {
       { id: "2", name: "b", contentType: "text/plain" }, // missing size → dropped
     ]);
     expect(parseStoredAttachments(raw)).toEqual([{ id: "1", name: "a.txt", contentType: "text/plain", size: 3 }]);
+  });
+});
+
+// --- Multimodal image delivery (#235) -----------------------------------------------------------
+describe("files/prompt — isImageAttachment", () => {
+  test("true for raster images, false for svg / non-images", () => {
+    for (const ct of ["image/png", "image/jpeg", "IMAGE/WEBP", "image/gif"]) expect(isImageAttachment(ct)).toBe(true);
+    for (const ct of ["image/svg+xml", "text/plain", "application/pdf", "audio/mpeg", "video/mp4"]) expect(isImageAttachment(ct)).toBe(false);
+  });
+});
+
+describe("files/prompt — resolveAttachments image delivery (#235)", () => {
+  test("deliverImages: an image under the cap resolves with a base64 data URL", async () => {
+    const u = makeUser();
+    const f = await createFile(u, { filename: "pic.png", contentType: "image/png", bytes: enc("\x89PNGdata") }, storage);
+    const res = await resolveAttachments(u, [f.id], storage, { deliverImages: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.items[0]!.text).toBeNull();
+    expect(res.items[0]!.dataUrl).toMatch(/^data:image\/png;base64,/);
+  });
+
+  test("without deliverImages an image stays named-only (no data URL)", async () => {
+    const u = makeUser();
+    const f = await createFile(u, { filename: "pic.png", contentType: "image/png", bytes: enc("\x89PNGdata") }, storage);
+    const res = await resolveAttachments(u, [f.id], storage); // deliverImages defaults off
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.items[0]!.dataUrl).toBeUndefined();
+  });
+
+  test("an over-cap image is not inlined even when deliverImages is on", async () => {
+    const u = makeUser();
+    const big = new Uint8Array(MAX_PROMPT_IMAGE_BYTES + 1024); // under the 25MB file cap, over the image cap
+    const f = await createFile(u, { filename: "huge.png", contentType: "image/png", bytes: big }, storage);
+    const res = await resolveAttachments(u, [f.id], storage, { deliverImages: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.items[0]!.dataUrl).toBeUndefined();
+  });
+
+  test("a non-image non-text file (audio) is never inlined as an image", async () => {
+    const u = makeUser();
+    const f = await createFile(u, { filename: "clip.mp3", contentType: "audio/mpeg", bytes: enc("audio") }, storage);
+    const res = await resolveAttachments(u, [f.id], storage, { deliverImages: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.items[0]!.dataUrl).toBeUndefined();
+    expect(res.items[0]!.text).toBeNull();
+  });
+});
+
+describe("files/prompt — multimodalUserParts", () => {
+  test("builds a text part then one image_url part per delivered image", () => {
+    const parts = multimodalUserParts("what is this?", [
+      { id: "1", name: "a.png", contentType: "image/png", size: 4, text: null, dataUrl: "data:image/png;base64,AAAA" },
+      { id: "2", name: "b.txt", contentType: "text/plain", size: 3, text: "abc" },
+    ]);
+    expect(parts).not.toBeNull();
+    expect(parts![0]).toEqual({ type: "text", text: "what is this?" });
+    expect(parts).toContainEqual({ type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } });
+    // Only the delivered image becomes a part — the text file rides the system block instead.
+    expect(parts!.filter((p) => p.type === "image_url")).toHaveLength(1);
+  });
+
+  test("returns null when no image was delivered", () => {
+    expect(multimodalUserParts("hi", [{ id: "1", name: "a.txt", contentType: "text/plain", size: 3, text: "abc" }])).toBeNull();
+    expect(multimodalUserParts("hi", [])).toBeNull();
+  });
+});
+
+describe("files/prompt — applyUserPartsToLast", () => {
+  const base: ChatMessage[] = [
+    { role: "system", content: "sys" },
+    { role: "user", content: "hi" },
+  ];
+  const parts: ContentPart[] = [
+    { type: "text", text: "hi" },
+    { type: "image_url", image_url: { url: "data:image/png;base64,AA" } },
+  ];
+
+  test("attaches parts to the last message when it is a user turn (copy, not mutation)", () => {
+    const out = applyUserPartsToLast(base, parts);
+    expect(out[out.length - 1]!.parts).toBe(parts);
+    expect(out[out.length - 1]!.content).toBe("hi"); // string fallback preserved
+    expect(out).not.toBe(base);
+    expect(base[1]!.parts).toBeUndefined(); // original untouched
+  });
+
+  test("no-op when parts is null, the last message is not a user turn, or the list is empty", () => {
+    expect(applyUserPartsToLast(base, null)).toBe(base);
+    const endsAssistant: ChatMessage[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "yo" },
+    ];
+    expect(applyUserPartsToLast(endsAssistant, parts)).toBe(endsAssistant);
+    expect(applyUserPartsToLast([], parts)).toEqual([]);
+  });
+});
+
+describe("files/prompt — attachmentsPromptBlock skips delivered images (#235)", () => {
+  test("a delivered image (dataUrl set) is not announced in the system block", () => {
+    const block = attachmentsPromptBlock([
+      { id: "1", name: "a.png", contentType: "image/png", size: 4, text: null, dataUrl: "data:image/png;base64,AAAA" },
+    ]);
+    expect(block).toBeNull(); // only a delivered image → nothing left to inline
+  });
+
+  test("a text file is still listed while a delivered image is skipped", () => {
+    const block = attachmentsPromptBlock([
+      { id: "1", name: "doc.txt", contentType: "text/plain", size: 3, text: "abc" },
+      { id: "2", name: "shot.png", contentType: "image/png", size: 4, text: null, dataUrl: "data:image/png;base64,AAAA" },
+    ]);
+    expect(block).not.toBeNull();
+    expect(block!.content).toContain("doc.txt");
+    expect(block!.content).not.toContain("shot.png");
   });
 });

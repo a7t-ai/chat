@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ACCOUNT_PLAN_IDS } from "../entitlements/plans.ts";
-import { catalogEntry, defaultMeta, MODEL_CATALOG } from "./catalog.ts";
+import { catalogEntry, defaultMeta, modelAcceptsImages, MODEL_CATALOG } from "./catalog.ts";
 import type { Modality } from "./types.ts";
 
 const MODALITIES: Modality[] = ["text", "image", "audio", "video", "document"];
@@ -61,6 +61,16 @@ describe("catalogEntry", () => {
 
   test("returns undefined for an unknown id (merge falls back to defaults)", () => {
     expect(catalogEntry("gpt-9-ultra")).toBeUndefined();
+  });
+});
+
+describe("modelAcceptsImages (#235)", () => {
+  test("true for a model whose input includes image (Omni)", () => {
+    expect(modelAcceptsImages("qwen-omni")).toBe(true);
+  });
+  test("false for a text-only model and for an uncataloged id (fail-safe)", () => {
+    expect(modelAcceptsImages("qwen-chat")).toBe(false);
+    expect(modelAcceptsImages("gpt-9-ultra")).toBe(false);
   });
 });
 

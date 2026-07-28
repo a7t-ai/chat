@@ -87,6 +87,14 @@ export function catalogEntry(id: string): ModelMeta | undefined {
   return MODEL_CATALOG[id];
 }
 
+// Whether a model can READ images (an "image" input modality) — the server-side gate for delivering
+// attached images to the model as multimodal parts (#235). Mirrors the client's modelAcceptsAttachments,
+// but reads the authoritative catalog here. Fail-safe: an uncataloged id is text-only, so a stray
+// image is never base64-inlined into a model that can't use it (it stays named-only, as before).
+export function modelAcceptsImages(id: string): boolean {
+  return (catalogEntry(id)?.input ?? []).includes("image");
+}
+
 // Conservative defaults for a Jano model we don't have a catalog row for yet — so a newly-wired
 // model is SHOWN (never hidden) while its metadata is still being filled in. Jano only serves LOCAL
 // models, so an uncataloged one is by definition local/free; we stay conservative about everything we

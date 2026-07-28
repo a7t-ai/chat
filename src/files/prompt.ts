@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../jano/types.ts";
+import type { ChatMessage, ContentPart } from "../jano/types.ts";
 import { getFileForDownload } from "./service.ts";
 import { defaultStorage, type FileStorage } from "./storage.ts";
 
@@ -16,6 +16,11 @@ import { defaultStorage, type FileStorage } from "./storage.ts";
 export const MAX_PROMPT_ATTACHMENTS = 10;
 export const MAX_PROMPT_FILE_BYTES = 128 * 1024; // 128 KB of text per file
 export const MAX_PROMPT_TOTAL_BYTES = 512 * 1024; // 512 KB of text across the turn
+// An image delivered to a multimodal model (#235) is base64-inlined into the request, so it is
+// bounded on its own: a photo is fine, a huge raw scan is not. Over this the image stays named-only
+// (attached + shown, not delivered) exactly like other non-text files. The file manager's per-file
+// cap (25 MB) is the outer bound; this is the inner "sensible to inline" cap.
+export const MAX_PROMPT_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB of raw image bytes
 
 // The metadata we persist on the user message + return to the client (never the bytes).
 export interface MessageAttachment {
@@ -25,10 +30,20 @@ export interface MessageAttachment {
   size: number;
 }
 
-// A resolved attachment: its metadata plus the decoded text when it's a text-like file (null for a
-// non-text file, which is shown in the gallery but not delivered to the model).
+// A resolved attachment: its metadata, the decoded text when it's a text-like file (null otherwise),
+// and — for an image delivered to a multimodal model (#235) — a base64 `data:` URL. At most one of
+// `text` / `dataUrl` is set; a non-text file that is neither (audio/video/binary, or an over-cap or
+// non-multimodal image) is shown in the gallery but not delivered to the model.
 export interface ResolvedAttachment extends MessageAttachment {
   text: string | null;
+  dataUrl?: string;
+}
+
+// Image content types we can deliver as multimodal `image_url` parts. SVG is deliberately excluded —
+// it is XML text (handled by isTextAttachment) and is never rendered, so it must not be sent as an image.
+export function isImageAttachment(contentType: string): boolean {
+  const ct = contentType.toLowerCase();
+  return ct.startsWith("image/") && ct !== "image/svg+xml";
 }
 
 // Text-like content types whose bytes we inline verbatim. A conservative allowlist: `text/*` plus a
@@ -78,6 +93,7 @@ export async function resolveAttachments(
   userId: string,
   fileIds: string[],
   storage: FileStorage = defaultStorage,
+  opts: { deliverImages?: boolean } = {},
 ): Promise<ResolveResult> {
   // De-dupe while preserving first-seen order, and bound the count.
   const seen = new Set<string>();
@@ -101,7 +117,16 @@ export async function resolveAttachments(
       size: file.size,
     };
     if (!isTextAttachment(file.contentType)) {
-      items.push({ ...meta, text: null });
+      // A multimodal model can READ images: deliver an image under the inline cap as a base64 data
+      // URL (#235), so it rides the user message as an image_url part. Everything else (audio/video/
+      // binary, an over-cap image, or ANY file when the model can't read images) stays named-only —
+      // attached + shown in the gallery, never inlined.
+      if (opts.deliverImages && isImageAttachment(file.contentType) && file.bytes.length <= MAX_PROMPT_IMAGE_BYTES) {
+        const b64 = Buffer.from(file.bytes).toString("base64");
+        items.push({ ...meta, text: null, dataUrl: `data:${file.contentType};base64,${b64}` });
+      } else {
+        items.push({ ...meta, text: null });
+      }
       continue;
     }
     // Bound this file to whatever's left of the total budget, capped at the per-file limit.
@@ -125,13 +150,16 @@ export async function resolveAttachments(
 // model KNOWS it was attached without receiving bytes it can't use yet (true multimodal delivery is
 // a later ticket — see #128 scope).
 export function attachmentsPromptBlock(items: ResolvedAttachment[]): ChatMessage | null {
-  if (items.length === 0) return null;
+  // Images delivered as multimodal parts (#235) ride the user message, not this system block — skip
+  // them here so they aren't also announced as "not included". Everything else is listed as before.
+  const undelivered = items.filter((a) => a.dataUrl === undefined);
+  if (undelivered.length === 0) return null;
 
   const parts = [
     "The user attached the following file(s). Use their contents to answer.",
     "",
   ];
-  for (const a of items) {
+  for (const a of undelivered) {
     if (a.text !== null) {
       parts.push(`--- FILE: ${a.name} (${a.contentType}) ---`, a.text, "--- END FILE ---", "");
     } else {
@@ -139,6 +167,29 @@ export function attachmentsPromptBlock(items: ResolvedAttachment[]): ChatMessage
     }
   }
   return { role: "system", content: parts.join("\n").trimEnd() };
+}
+
+// Build the multimodal `content` parts for the user turn (#235): the message text, then one
+// image_url part per delivered image. Returns null when no image was delivered, so the turn stays a
+// plain-string message. Text first so the model reads the question before the images.
+export function multimodalUserParts(text: string, items: ResolvedAttachment[]): ContentPart[] | null {
+  const images = items.filter((a) => a.dataUrl !== undefined);
+  if (images.length === 0) return null;
+  return [
+    { type: "text", text },
+    ...images.map((a): ContentPart => ({ type: "image_url", image_url: { url: a.dataUrl as string } })),
+  ];
+}
+
+// Attach multimodal parts to the LAST message of a prompt array when it is the user turn (#235).
+// The persisted path builds the current user message from the stored thread rather than inline, so
+// this is how images reach it. A no-op (array returned unchanged) when parts is null or the last
+// message is not a user turn, so callers can pass through unconditionally.
+export function applyUserPartsToLast(messages: ChatMessage[], parts: ContentPart[] | null): ChatMessage[] {
+  if (!parts) return messages;
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "user") return messages;
+  return [...messages.slice(0, -1), { ...last, parts }];
 }
 
 // The metadata to persist on the user message (bytes/text stripped) — what the transcript renders.

@@ -489,6 +489,41 @@ describe("ChatView — empty state + sending", () => {
     const box = screen.getByPlaceholderText(/Message/) as HTMLTextAreaElement;
     expect(box.value.length).toBeGreaterThan(0);
   });
+
+  // #236: focus must never leave the prompt field on send — the field stays live during a turn
+  // (a disabled textarea gets blurred by the browser) and the caret returns to it after a send.
+  describe("prompt focus stays put (#236)", () => {
+    test("the prompt field is not disabled while a turn is in flight", async () => {
+      let release: ((v: unknown) => void) | undefined;
+      sendChat.mockImplementation(
+        (_body: unknown, events: ChatEvents) =>
+          new Promise((resolve) => {
+            events.onMeta?.({ conversationId: "c1", model: "qwen" });
+            release = resolve; // hold the turn open so we can observe the streaming state
+          }),
+      );
+      renderView();
+      const box = (await screen.findByPlaceholderText(/Message/)) as HTMLTextAreaElement;
+      await userEvent.type(box, "ping");
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(sendChat).toHaveBeenCalled());
+      // Mid-turn the composer stays enabled so the browser can't blur focus out of it.
+      expect(box.disabled).toBe(false);
+      await act(async () => {
+        release?.(null);
+      });
+    });
+
+    test("focus returns to the prompt field after sending via the Send button", async () => {
+      renderView();
+      const box = (await screen.findByPlaceholderText(/Message/)) as HTMLTextAreaElement;
+      await userEvent.type(box, "hello");
+      // Clicking Send moves focus onto the button; submit() must hand it back to the field.
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(sendChat).toHaveBeenCalled());
+      await waitFor(() => expect(document.activeElement).toBe(box));
+    });
+  });
 });
 
 describe("ChatView — model picker + /model autocomplete", () => {

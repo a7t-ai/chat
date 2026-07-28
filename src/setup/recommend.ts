@@ -26,11 +26,14 @@ export function budgetFor(hw: Pick<Hardware, "ramGB" | "vramGB">): number {
 // thumb for a GGUF: the weights file should be at most ~60% of the memory budget (leaving room for
 // the KV cache + OS/app), the model needs its minimum budget, and the download plus ~5 GB headroom
 // must fit on disk.
-export function recommend(hw: Pick<Hardware, "ramGB" | "vramGB" | "diskFreeGB">): SetupModel[] {
+export function recommend(
+  hw: Pick<Hardware, "ramGB" | "vramGB" | "diskFreeGB">,
+  catalog: SetupModel[] = SETUP_CATALOG,
+): SetupModel[] {
   const budget = budgetFor(hw);
-  return SETUP_CATALOG.filter(
-    (m) => budget >= m.minBudgetGB && m.sizeGB <= budget * 0.6 && m.sizeGB + 5 <= hw.diskFreeGB,
-  ).sort((a, b) => b.sizeGB - a.sizeGB);
+  return catalog
+    .filter((m) => budget >= m.minBudgetGB && m.sizeGB <= budget * 0.6 && m.sizeGB + 5 <= hw.diskFreeGB)
+    .sort((a, b) => b.sizeGB - a.sizeGB);
 }
 
 // Parse macOS `df -g <path>` free space (the "Available" column, GB). Output looks like:

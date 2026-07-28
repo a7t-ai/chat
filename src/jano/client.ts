@@ -1,6 +1,13 @@
 import { config } from "../config.ts";
 import { parseChatCompletionStream } from "../llm/stream.ts";
-import type { ChatChunk, ChatRequest, LLMBackend, ModelInfo } from "./types.ts";
+import type { ChatChunk, ChatMessage, ChatRequest, ContentPart, LLMBackend, ModelInfo } from "./types.ts";
+
+// Serialize a message to the OpenAI wire shape. A message carrying multimodal `parts` (#235) sends
+// them as the `content` array (vision format); otherwise the plain string content is sent. Every
+// non-multimodal turn is byte-identical to before — only a message with parts changes shape.
+function toWireMessage(m: ChatMessage): { role: string; content: string | ContentPart[] } {
+  return m.parts && m.parts.length > 0 ? { role: m.role, content: m.parts } : { role: m.role, content: m.content };
+}
 
 // Client for the EXISTING host Jano router (OpenAI-compatible). There is no second
 // Jano: this only calls it. Routing through Jano lets chat share the coder/chat swap
@@ -21,7 +28,7 @@ export class JanoBackend implements LLMBackend {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         model: req.model,
-        messages: req.messages,
+        messages: req.messages.map(toWireMessage),
         temperature: req.temperature ?? 0.7,
         stream: false,
       }),
@@ -42,7 +49,7 @@ export class JanoBackend implements LLMBackend {
       headers,
       body: JSON.stringify({
         model: req.model,
-        messages: req.messages,
+        messages: req.messages.map(toWireMessage),
         temperature: req.temperature ?? 0.7,
         stream: true,
         stream_options: { include_usage: true },

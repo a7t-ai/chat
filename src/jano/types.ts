@@ -1,9 +1,22 @@
 // OpenAI-compatible shapes + the backend interface. This interface is the swap seam:
 // JanoBackend today; a bundled jano or a hosted API later (product path).
 
+// A single piece of multimodal message content (OpenAI vision format). Text stays the plain-string
+// path; an image rides as a `data:`-URL `image_url` part (#235). Audio/video parts are a later step
+// (their wire shape is endpoint-specific), so only these two are modeled today.
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
+  // The text-only content. Always populated — it is what persistence, history, memory, summaries,
+  // and token counting read, and the fallback the wire request sends when `parts` is unset.
   content: string;
+  // Multimodal delivery (#235): when set, the wire request sends THIS as the message `content`
+  // (an OpenAI content-parts array) instead of the plain `content` string. Kept optional and
+  // apart from `content` so every non-multimodal path is untouched — only src/jano/client.ts reads it.
+  parts?: ContentPart[];
 }
 
 export interface ModelInfo {

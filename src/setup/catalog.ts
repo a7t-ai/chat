@@ -25,27 +25,29 @@ export interface SetupModel {
   minBudgetGB: number;
 }
 
-// Curated, intentionally small, and current. Ranked here from smallest to largest; recommend() sorts
-// by best-fit at runtime. Q4_K_M throughout for the best size/quality trade-off. Validate each
-// hfRepo/ggufFile still resolves (the wizard checks the HF API before downloading).
+// The OFFLINE FALLBACK catalog: used only when the live Hugging Face query (src/setup/hf.ts) is
+// unreachable or returns nothing usable, so the wizard never dead-ends. Kept small, current, and
+// Q4_K_M throughout for the best size/quality trade-off; recommend() ranks by best-fit at runtime.
+// Refresh this when it drifts — the live query is what keeps recommendations fresh day to day; each
+// hfRepo/ggufFile here is verified to resolve (the wizard also checks the HF API before downloading).
 export const SETUP_CATALOG: SetupModel[] = [
   {
-    id: "qwen2.5-7b",
-    label: "Qwen2.5 7B Instruct",
-    hfRepo: "bartowski/Qwen2.5-7B-Instruct-GGUF",
-    ggufFile: "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+    id: "qwen3.5-4b",
+    label: "Qwen3.5 4B",
+    hfRepo: "unsloth/Qwen3.5-4B-GGUF",
+    ggufFile: "Qwen3.5-4B-Q4_K_M.gguf",
     quant: "Q4_K_M",
-    sizeGB: 4.7,
+    sizeGB: 2.7,
     minBudgetGB: 8,
   },
   {
-    id: "qwen2.5-14b",
-    label: "Qwen2.5 14B Instruct",
-    hfRepo: "bartowski/Qwen2.5-14B-Instruct-GGUF",
-    ggufFile: "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
+    id: "qwen3.5-9b",
+    label: "Qwen3.5 9B",
+    hfRepo: "unsloth/Qwen3.5-9B-GGUF",
+    ggufFile: "Qwen3.5-9B-Q4_K_M.gguf",
     quant: "Q4_K_M",
-    sizeGB: 9,
-    minBudgetGB: 16,
+    sizeGB: 5.7,
+    minBudgetGB: 12,
   },
   {
     id: "qwen-omni",
@@ -54,16 +56,25 @@ export const SETUP_CATALOG: SetupModel[] = [
     ggufFile: "Qwen3-Omni-30B-A3B-Instruct-Q4_K_M.gguf",
     quant: "Q4_K_M",
     sizeGB: 18.6,
-    minBudgetGB: 40,
+    minBudgetGB: 28,
   },
   {
-    id: "qwen2.5-32b",
-    label: "Qwen2.5 32B Instruct",
-    hfRepo: "bartowski/Qwen2.5-32B-Instruct-GGUF",
-    ggufFile: "Qwen2.5-32B-Instruct-Q4_K_M.gguf",
+    id: "qwen3-coder-30b",
+    label: "Qwen3-Coder 30B (A3B)",
+    hfRepo: "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+    ggufFile: "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
     quant: "Q4_K_M",
-    sizeGB: 20,
+    sizeGB: 18.6,
     minBudgetGB: 28,
+  },
+  {
+    id: "qwen3.6-35b-a3b",
+    label: "Qwen3.6 35B (A3B)",
+    hfRepo: "unsloth/Qwen3.6-35B-A3B-GGUF",
+    ggufFile: "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+    quant: "Q4_K_M",
+    sizeGB: 22.1,
+    minBudgetGB: 32,
   },
   {
     id: "llama3.3-70b",
@@ -76,9 +87,10 @@ export const SETUP_CATALOG: SetupModel[] = [
   },
 ];
 
-/** Look up a catalog entry by id (used by the `--model <id>` non-interactive path). */
-export function setupModelById(id: string): SetupModel | undefined {
-  return SETUP_CATALOG.find((m) => m.id === id);
+/** Look up a catalog entry by id (used by the `--model <id>` non-interactive path). Searches the
+ *  given catalog (the live one when present) then falls back to the offline SETUP_CATALOG. */
+export function setupModelById(id: string, catalog: SetupModel[] = SETUP_CATALOG): SetupModel | undefined {
+  return catalog.find((m) => m.id === id) ?? SETUP_CATALOG.find((m) => m.id === id);
 }
 
 /** The Hugging Face resolve URL for a model's GGUF (the direct download link). */

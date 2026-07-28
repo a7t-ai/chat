@@ -79,6 +79,34 @@ describe("JanoBackend.chat — enable_thinking wiring", () => {
     expect(sink.body?.store).toBe(false);
     expect(sink.body?.chat_template_kwargs).toEqual({ enable_thinking: true });
   });
+
+  test("serializes a message's multimodal parts as the wire `content` array (#235)", async () => {
+    const sink: { body?: Record<string, unknown> } = {};
+    captureBody(sink);
+    await drain(
+      new JanoBackend("http://jano.test").chat({
+        model: "qwen-omni",
+        messages: [
+          { role: "system", content: "sys" },
+          {
+            role: "user",
+            content: "what is this?",
+            parts: [
+              { type: "text", text: "what is this?" },
+              { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+            ],
+          },
+        ],
+      }),
+    );
+    const msgs = sink.body?.messages as { role: string; content: unknown }[];
+    // A message without parts stays a plain string; the one with parts ships the content-parts array.
+    expect(msgs[0]).toEqual({ role: "system", content: "sys" });
+    expect(msgs[1]!.content).toEqual([
+      { type: "text", text: "what is this?" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+    ]);
+  });
 });
 
 describe("JanoBackend — listModels + complete", () => {

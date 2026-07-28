@@ -2195,6 +2195,10 @@ function Composer({
     // Reset the in-prompt gallery for the next message (the files stay in the caller's file
     // manager; a reload of this conversation shows them attached to the message just sent).
     attachments.clear();
+    // Keep the caret in the prompt field after a send — including when the send came from clicking
+    // the Send button, which would otherwise leave focus on the button (#236). The field is never
+    // disabled mid-turn (see the textarea), so focus never leaves the composer.
+    inputRef.current?.focus();
   }
   // Activate the highlighted (or clicked) menu row: run a command, or complete a `/model` text.
   // This is the "pick it" gesture (Enter on a command / a click) — a command RUNS.
@@ -2458,6 +2462,10 @@ function Composer({
             {t("composer.listening")}
           </p>
         )}
+        {/* Deliberately NOT disabled while a turn streams (#236): the browser blurs a disabled
+            element, so focus would jump out of the composer on every send. Keeping the field live
+            preserves focus (and lets you type the next message ahead); submit() still refuses to
+            send while `disabled`, and the parent guards on `sending`, so a turn can't double-fire. */}
         <textarea
           ref={inputRef}
           className="composer-input"
@@ -2519,7 +2527,6 @@ function Composer({
               }
             }
           }}
-          disabled={disabled}
         />
         <div className="composer-toolbar">
           <div className="composer-tools-left">
