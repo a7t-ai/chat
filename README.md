@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="assets/hero.png" alt="a7t.chat: the AI chat for everyone in your house" width="720">
-</p>
-
-<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="brand/lockup-horizontal-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="brand/lockup-horizontal-light.png">
